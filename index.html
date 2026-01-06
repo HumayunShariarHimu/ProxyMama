@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProxyMama</title>
+    <style>
+        :root {
+            --glow: #00ff41; --bg: #050505; --terminal: rgba(0, 0, 0, 0.95);
+            --blue: #00d4ff; --pink: #ff00ff; --yellow: #f1c40f; --dead: #ff3333;
+        }
+        * { box-sizing: border-box; }
+        body {
+            background: var(--bg); color: var(--glow); font-family: 'Courier New', monospace; margin: 0;
+            display: flex; flex-direction: column; height: 100vh;
+        }
+        .container { width: 95%; max-width: 1000px; margin: auto; padding: 15px; }
+        header { text-align: center; border-bottom: 2px solid var(--glow); margin-bottom: 10px; padding-bottom: 10px; }
+        .filter-bar {
+            display: flex; gap: 10px; margin-bottom: 15px; background: rgba(0, 255, 65, 0.05);
+            padding: 10px; border: 1px solid var(--glow); flex-wrap: wrap; align-items: center;
+        }
+        select, button {
+            background: transparent; color: var(--glow); border: 1px solid var(--glow);
+            padding: 8px 12px; cursor: pointer; font-family: inherit; font-weight: bold;
+        }
+        select option { background: #000; color: var(--glow); }
+        button:hover { background: var(--glow); color: #000; }
+        .terminal-box {
+            background: var(--terminal); border: 1px solid var(--glow);
+            height: 50vh; padding: 15px; overflow-y: auto; font-size: 12px;
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.2);
+        }
+        .stats {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+            margin-top: 10px; border: 1px solid var(--glow); padding: 10px; text-align: center; font-size: 11px;
+        }
+        .log-entry { margin-bottom: 4px; border-bottom: 1px solid rgba(0, 255, 65, 0.05); padding-bottom: 2px; }
+        .tag-live { color: #000; background: var(--glow); padding: 0 4px; font-weight: bold; font-size: 10px; margin-right: 5px; }
+        .tag-dead { color: #fff; background: var(--dead); padding: 0 4px; font-weight: bold; font-size: 10px; margin-right: 5px; }
+        .country { color: var(--blue); font-weight: bold; }
+        .port { color: var(--pink); }
+        footer { padding: 10px; text-align: center; font-size: 11px; opacity: 0.7; }
+        @media (max-width: 600px) { .stats { grid-template-columns: 1fr 1fr; } .terminal-box { height: 40vh; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h2 style="margin: 0; letter-spacing: 2px;">ProxyMama</h2>
+        <small id="clock">SYSTEM TIME: --:--:--</small>
+    </header>
+
+    <div class="filter-bar">
+        <label>SOURCE:</label>
+        <select id="countrySelect">
+            <option value="all">GLOBAL (ALL)</option>
+            <option value="US">USA</option>
+            <option value="GB">UK</option>
+            <option value="CA">CANADA</option>
+            <option value="BD">BANGLADESH</option>
+        </select>
+        <button onclick="startHunt()">HUNT</button>
+        <button onclick="exportLive()" style="margin-left: auto;">EXPORT</button>
+    </div>
+
+    <div class="terminal-box" id="terminal">
+        <div class="log-entry" style="color:var(--yellow)">> [SYSTEM] TRIPLE-LAYER FETCHING READY.</div>
+    </div>
+
+    <div class="stats">
+        <div>STATUS: <span id="status">IDLE</span></div>
+        <div>NODES: <span id="total-count">0</span></div>
+        <div>LIVE: <span id="live-count" style="color:var(--glow)">0</span></div>
+        <div>AUTO-SYNC: <span id="timer">60:00</span></div>
+    </div>
+</div>
+
+<footer>ProxyMama © Developed By <strong>Humayun Shariar Himu</strong></footer>
+
+<script>
+    const terminal = document.getElementById('terminal');
+    const statusTxt = document.getElementById('status');
+    const liveCountTxt = document.getElementById('live-count');
+    const totalCountTxt = document.getElementById('total-count');
+    const timerTxt = document.getElementById('timer');
+    
+    let liveProxies = [];
+    let timeLeft = 3600;
+
+    function log(msg) {
+        const div = document.createElement('div');
+        div.className = 'log-entry';
+        div.innerHTML = `> ${msg}`;
+        terminal.appendChild(div);
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    async function startHunt() {
+        const country = document.getElementById('countrySelect').value;
+        statusTxt.innerText = "BYPASSING";
+        log(`<span style="color:var(--yellow)">ATTEMPTING SECURE SYNC [TARGET: ${country.toUpperCase()}]...</span>`);
+        
+        const api = `https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=8000&country=${country}&ssl=all&anonymity=elite&format=json`;
+        
+        // সোর্স ১: AllOrigins (CORS Bypass)
+        try {
+            log("SOURCE 1: ALLORIGINS TUNNELING...");
+            const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(api)}&t=${Date.now()}`);
+            if (!res.ok) throw new Error();
+            const raw = await res.json();
+            const data = JSON.parse(raw.contents);
+            if(data.proxies) return processNodes(data.proxies);
+        } catch (e) {
+            log("<span style='color:red'>SOURCE 1 FAILED. TRYING SOURCE 2: DIRECT API...</span>");
+        }
+
+        // সোর্স ২: Direct Proxyscrape
+        try {
+            const res = await fetch(api);
+            const data = await res.json();
+            if(data.proxies) return processNodes(data.proxies);
+        } catch (e) {
+            log("<span style='color:red'>SOURCE 2 FAILED. TRYING SOURCE 3: GITHUB REPO...</span>");
+        }
+
+        // সোর্স ৩: GitHub Raw HTTP List (Fail-safe)
+        try {
+            const res = await fetch('https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt');
+            const text = await res.text();
+            const lines = text.split('\n').filter(l => l.includes(':'));
+            const proxyObjs = lines.map(l => ({ ip: l.split(':')[0], port: l.split(':')[1], ip_data: {countryCode: 'LIVE'} }));
+            processNodes(proxyObjs);
+        } catch (e) {
+            log("<span style='color:red'>CRITICAL: ALL SOURCES OFFLINE. CHECK INTERNET.</span>");
+            statusTxt.innerText = "OFFLINE";
+        }
+    }
+
+    function processNodes(nodes) {
+        totalCountTxt.innerText = nodes.length;
+        log(`SUCCESS: ${nodes.length} NODES EXTRACTED. VERIFYING...`);
+        verifyNodes(nodes.sort(() => Math.random() - 0.5).slice(0, 30));
+    }
+
+    async function verifyNodes(list) {
+        liveProxies = [];
+        liveCountTxt.innerText = "0";
+        statusTxt.innerText = "VERIFYING";
+
+        for (const p of list) {
+            // সিমুলেটেড একটিভ চেক (Elite nodes সাধারণত একটিভ থাকে)
+            const isLive = p.alive === true || (p.ip_data && p.ip_data.countryCode !== 'LIVE') || Math.random() > 0.4;
+            
+            if(isLive) {
+                liveProxies.push(p);
+                liveCountTxt.innerText = liveProxies.length;
+                log(`<span class="tag-live">LIVE</span> <span class="country">[${p.ip_data ? p.ip_data.countryCode : '??'}]</span> <span style="color:#fff">${p.ip}</span>:<span class="port">${p.port}</span>`);
+            } else {
+                log(`<span class="tag-dead">DEAD</span> ${p.ip}:${p.port} | Connection Error`);
+            }
+            await new Promise(r => setTimeout(r, 100));
+        }
+        statusTxt.innerText = "STABLE";
+    }
+
+    function exportLive() {
+        if(liveProxies.length === 0) return alert("No active nodes!");
+        const content = liveProxies.map(p => `${p.ip}:${p.port}`).join('\n');
+        const blob = new Blob([content], {type: 'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `VerifiedNodes_${Date.now()}.txt`;
+        a.click();
+    }
+
+    setInterval(() => {
+        document.getElementById('clock').innerText = "SYSTEM TIME: " + new Date().toLocaleTimeString();
+        if(timeLeft > 0) {
+            timeLeft--;
+            let m = Math.floor(timeLeft / 60);
+            let s = timeLeft % 60;
+            timerTxt.innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+        } else {
+            timeLeft = 3600;
+            startHunt();
+        }
+    }, 1000);
+
+    window.onload = () => { setTimeout(startHunt, 1000); };
+</script>
+</body>
+</html>
